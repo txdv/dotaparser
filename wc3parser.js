@@ -93,9 +93,12 @@ function readPlayerRecord(data, start) {
 
   if (record.additional == 1) {
     e += 1;
+  } else if (record.additional == 0) {
   } else {
-    throw "not supported";
+    throw "not supported " + record.additional;
   }
+
+  record.size = e - start;
 
   return record;
 }
@@ -103,28 +106,13 @@ function readPlayerRecord(data, start) {
 replay('1144311.w3g', function (header, data) {
   var start = 0;
 
-  var record = {
-    id:       data.readInt8(start + 0x0004),
-    playerid: data.readInt8(start + 0x0004 + 0x0001),
-  };
 
-  var s = start + 0x0004 + 0x0002;
-  var e = end(data, s);
+  start += 4;
 
-  record.name = data.toString('ascii', s, e);
+  var record = readPlayerRecord(data, start);
 
-  record.additional = data[e + 1];
-
-  e += 2;
-
-  if (record.additional == 1) {
-    e += 1;
-  } else {
-    throw "not supported";
-  }
-
-  s = e;
-  e = end(data, e);
+  s = start + record.size;
+  e = end(data, s);
 
   var item = {
     record: record,
@@ -151,6 +139,15 @@ replay('1144311.w3g', function (header, data) {
   item.lang = data.readUInt32LE(s);
   s += 4;
 
+  item.playerlist = [];
+  for (var i = 0; i < 20; i++) {
+    var player = readPlayerRecord(data, s);
+    if (player.size != 4) {
+    item.playerlist.push(player);
+    }
+    s += player.size;
+  }
 
-  console.log(item);
+  //console.log(item);
+  console.log(data.slice(s, s + 20));
 });
