@@ -4,12 +4,11 @@ var fs   = require('fs'),
 
 String.prototype.reverse=function() { return this.split("").reverse().join(""); }
 
-function replay(filename, callback) {
+exports.replay = function (filename, callback) {
 
 fs.readFile(filename, function (err, data) {
   var magic = data.toString('ascii', 0, 26);
   if (magic != 'Warcraft III recorded game') {
-    console.log('NESAMONE');
     return;
   }
 
@@ -141,10 +140,9 @@ function readGameStatRecord(data, start) {
   return record;
 }
 
-function replay2(filename, callback, msgcallback) {
+exports.replay2 = function (filename, callback, msgcallback, endcallback) {
 
-replay(filename, function (header, data) {
-  callback(header);
+exports.replay(filename, function (header, data) {
   var start = 0;
 
   start += 4;
@@ -180,16 +178,19 @@ replay(filename, function (header, data) {
   s += 4;
 
   item.playerlist = [];
+  item.playerlist[item.record.playerid] = item.record;
   for (var i = 0; i < 20; i++) {
     var player = readPlayerRecord(data, s);
     if (player.size != 4) {
-      item.playerlist.push(player);
+      item.playerlist[player.playerid] = player;
     }
     s += player.size;
   }
-
   item.gamestart = readGameStatRecord(data, s);
   s = item.gamestart.end;
+
+  header.meta = item;
+  callback(header, data);
 
   var done = false;
   while (!done) {
@@ -226,6 +227,12 @@ replay(filename, function (header, data) {
         size: data.readUInt16LE(s + 1),
         inc:  data.readUInt16LE(s + 3),
       };
+
+      if (msg.inc === undefined) {
+        //console.log(msg.inc);
+      }
+
+
       var offset = 5;
       if (msg.size > 2) {
         msg.data = data.slice(s + offset, s + offset + msg.size - 2);
@@ -249,22 +256,55 @@ replay(filename, function (header, data) {
       msgcallback(msg);
     }
   }
+  if (endcallback !== undefined) {
+    endcallback();
+  }
 });
 
 }
 
-replay2('1144311.w3g', function (header, data) {
-  console.log(header, data);
+exports.replay3 = function (filename, callback, end) {
+
+var game = {
+  time: 0
+};
+var header = null;
+
+exports.replay2(filename, function (h, data) {
+  header = h;
 }, function (msg) {
+  //time += msg.inc;
+  if (msg.type == 'chat') {
+    var event = {
+      type: 'chat',
+      player: {
+        id:   header.meta.playerlist[msg.playerid].playerid,
+        name: header.meta.playerlist[msg.playerid].name,
+      },
+      text: msg.text
+    }
+    if (callback !== undefined) {
+      callback(game, event);
+    }
+  }
+  if (msg.type == 'timeslot') {
+    game.time += msg.inc;
+  }
   if (msg.type == 'timeslot' && msg.size > 2) {
     data = {
       pid: msg.data.readUInt8(0),
       length: msg.data.readUInt16LE(1),
     };
+
+
     var id = msg.data.readUInt8(3);
     var s = 4;
     switch (id) {
     case 0x10:
+      var player = header.meta.playerlist[data.pid];
+      //console.log(player.name);
+      var abilityflag = msg.data.readUInt16LE(3);
+      var itemid = msg.data.readUInt32LE(5);
       break;
     case 0x11:
       break;
@@ -297,4 +337,7 @@ replay2('1144311.w3g', function (header, data) {
       break;
     }
   }
-});
+}, end);
+
+}
+

@@ -1,0 +1,13 @@
+{
+  "name" : "dotaparser",
+  "description" : "dota replay parser",
+  "version" : "0.1.0",
+  "author" : "Andrius Bentkus <andrius.bentkus@gmail.com>",
+  "repository" : {
+    "type" : "git",
+    "url" : "http://github.com/txdv/dotaparser"
+  },
+  "engines" : ["node >= 0.6"],
+  "main" : "main",
+  "files" : [ "lib/", "examples" ]
+}
