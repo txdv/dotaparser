@@ -1,16 +1,30 @@
+//
+// **dotaparser** is a replay parser for the popular warcraft3 map/standalone
+// game **dota**. It will try to gather as much information as possible from
+// the replays and serve it in way which is common in javascript.
+// [http://w3g.deepnode.de/](http://w3g.deepnode.de/) played a major role in writing this parser.
+
 var fs   = require('fs'),
     zlib = require('zlib'),
     async = require('async');
 
 String.prototype.reverse = function() { return this.split("").reverse().join(""); }
 
+// This function reads an entire replay into the buffer, decodes the header,
+// the data (unzips it as well) and then returns a callback with the header
+// and the unzipped data.
+// While the header is already parsed and easily accessible (json), the data
+// is still raw, it is just the unzipped version.
+
 exports.replay = function (filename, callback) {
   fs.readFile(filename, function (err, data) {
+    // Check if the magic prefix is existent.
     var magic = data.toString('ascii', 0, 26);
     if (magic != 'Warcraft III recorded game') {
       return;
     }
 
+    // Read the header details.
     var header = {
       offset:  data.readUInt32LE(0x001c),
       csize:   data.readUInt32LE(0x0020),
@@ -38,6 +52,8 @@ exports.replay = function (filename, callback) {
 
     var blocks = [];
     var start = header.offset;
+    // Decode the header (the compressed size and the actual size)
+    // of the blocks.
     for (var i = 0; i < header.blocks; i++) {
       var block = {
         csize: data.readUInt16LE(start),
@@ -50,6 +66,7 @@ exports.replay = function (filename, callback) {
       blocks.push(block);
     }
 
+    // Unzip all blocks.
     async.forEach(blocks, function (block, callback) {
       zlib.unzip(block.cdata, function (err, buffer) {
         if (err === null) {
@@ -58,7 +75,9 @@ exports.replay = function (filename, callback) {
         callback(err);
       });
     }, function (err) {
+      // Create a new buffer to hold the unzipped content.
       var data = new Buffer(header.blocks * 8192);
+      // Put the blocks in the appropriate places in the new buffer.
       for (var i = 0; i < header.blocks; i++) {
         blocks[i].data.copy(data, i * 8192);
       }
