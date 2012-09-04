@@ -269,6 +269,7 @@ exports.replay2 = function (filename, callback, msgcallback, endcallback) {
       case 0x17:
         msg = {
           id: 0x17,
+          type: 'leave',
           reason: data.readUInt16LE(s + 1),
           playerid: data.readUInt8(s + 2),
           result: data.readUInt16LE(s + 3)
