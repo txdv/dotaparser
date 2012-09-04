@@ -16,7 +16,7 @@ String.prototype.reverse = function() { return this.split("").reverse().join("")
 // While the header is already parsed and easily accessible (json), the data
 // is still raw, it is just the unzipped version.
 
-exports.replay = function (filename, callback) {
+exports.unzip = function (filename, callback) {
   fs.readFile(filename, function (err, data) {
     // Check if the magic prefix is existent.
     var magic = data.toString('ascii', 0, 26);
@@ -164,13 +164,13 @@ function readGameStatRecord(data, start) {
   return record;
 }
 
-// Uses the previous function and decodes all messages within the unzipped data.
+// Unzips the replay and decodes all blocks within the unzipped data.
 // This function has 2 additional callbacks, the blockcb and the endcb,
 // which get called when a block is decoded or the end of the data is reached.
 // The header of the first callback gets extended with additional information
 // about the players.
-exports.replay2 = function (filename, callback, blockcb, endcb) {
-  exports.replay(filename, function (header, data) {
+exports.parseBlocks = function (filename, callback, blockcb, endcb) {
+  exports.unzip(filename, function (header, data) {
     var start = 0;
 
     start += 4;
@@ -289,13 +289,14 @@ exports.replay2 = function (filename, callback, blockcb, endcb) {
   });
 }
 
-exports.replay3 = function (filename, callback, end) {
+// Parses the actions encoded within the messages in the blocks.
+exports.parseActions = function (filename, callback, end) {
   var game = {
     time: 0
   };
   var header = null;
 
-  exports.replay2(filename, function (h, data) {
+  exports.parseBlocks(filename, function (h, data) {
     header = h;
   }, function (msg) {
     //time += msg.inc;
