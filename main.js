@@ -86,6 +86,9 @@ exports.replay = function (filename, callback) {
   });
 }
 
+// A function which helps to determine the position of the next
+// string end (\0) in a buffer.
+
 function end(data, start) {
   var i = 0;
   while (data[start + i] != 0) {
@@ -94,6 +97,7 @@ function end(data, start) {
   return start + i;
 }
 
+// Reads the entire player record.
 function readPlayerRecord(data, start) {
   var record = {
     id:       data.readInt8(start),
@@ -120,6 +124,7 @@ function readPlayerRecord(data, start) {
   return record;
 }
 
+// Reads a slot record.
 function readSlotRecord(data, start) {
   return {
     id:     data.readInt8(start),
@@ -133,6 +138,7 @@ function readSlotRecord(data, start) {
   }
 }
 
+// Reads the gamestart record.
 function readGameStatRecord(data, start) {
   if (data.readInt8(start) != 25) {
     throw "not a gamestat record";
@@ -158,6 +164,12 @@ function readGameStatRecord(data, start) {
   return record;
 }
 
+// Uses the previous function and decodes all messages within the unzipped data.
+// This function has 2 additional callbacks, the msgcallback and the endcallback,
+// which get called when a message is decoded or the end of the data is reached
+// accordingly.
+// The header of the first callback gets extended with additional information
+// about the players.
 exports.replay2 = function (filename, callback, msgcallback, endcallback) {
   exports.replay(filename, function (header, data) {
     var start = 0;
