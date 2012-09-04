@@ -91,7 +91,8 @@ function readPlayerRecord(data, start) {
   if (record.additional == 1) {
   } else if (record.additional == 0) {
   } else {
-    throw "not supported " + record.additional;
+    var error = "not supported " + record.additional;
+    throw new error;
   }
   e+= record.additional;
 
