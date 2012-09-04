@@ -165,12 +165,11 @@ function readGameStatRecord(data, start) {
 }
 
 // Uses the previous function and decodes all messages within the unzipped data.
-// This function has 2 additional callbacks, the msgcallback and the endcallback,
-// which get called when a message is decoded or the end of the data is reached
-// accordingly.
+// This function has 2 additional callbacks, the blockcb and the endcb,
+// which get called when a block is decoded or the end of the data is reached.
 // The header of the first callback gets extended with additional information
 // about the players.
-exports.replay2 = function (filename, callback, msgcallback, endcallback) {
+exports.replay2 = function (filename, callback, blockcb, endcb) {
   exports.replay(filename, function (header, data) {
     var start = 0;
 
@@ -281,11 +280,11 @@ exports.replay2 = function (filename, callback, msgcallback, endcallback) {
       }
 
       if (!done && msg !== null) {
-        msgcallback(msg);
+        blockcb(msg);
       }
     }
-    if (endcallback !== undefined) {
-      endcallback();
+    if (endcb !== undefined) {
+      endcb();
     }
   });
 }
