@@ -89,11 +89,11 @@ function readPlayerRecord(data, start) {
   e += 2;
 
   if (record.additional == 1) {
-    e += 1;
   } else if (record.additional == 0) {
   } else {
     throw "not supported " + record.additional;
   }
+  e+= record.additional;
 
   record.size = e - start;
 
