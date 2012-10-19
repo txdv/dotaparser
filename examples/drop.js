@@ -1,13 +1,20 @@
-var dotaparser = require('../main'),
-    timespan = require('timespan'),
-    ansi = require('ansi'),
-    fs = require('fs'),
-    cursor = ansi(process.stdout),
-    print = process.stdout.write,
-    fs = require('fs');
+/*global console: false, require: false, process: false */
 
-var itemlist = { };
-var items = dotaparser.data.ItemList.Item;
+(function () {
+'use strict';
+
+var
+  dotaparser = require('../main'),
+  timespan = require('timespan'),
+  ansi = require('ansi'),
+  fs = require('fs'),
+  cursor = ansi(process.stdout),
+  print = process.stdout.write;
+
+var
+  itemlist = { },
+  items = dotaparser.data.ItemList.Item;
+
 for (var i = 0; i < items.length; i++) {
   var item = items[i];
   itemlist[item.Id] = item;
@@ -18,8 +25,6 @@ dotaparser.parseActions(fs.readFileSync(process.argv[2]), function (game, event)
     return;
   }
   switch (event.type) {
-  //case 'dropitem':
-  //case 'selection':
   case 'unitbuilding':
     var item = itemlist[event.itemid];
     if (item === undefined) {
@@ -30,5 +35,11 @@ dotaparser.parseActions(fs.readFileSync(process.argv[2]), function (game, event)
       console.log(item);
     }
     break;
+  case 'nesamone':
+    break;
+  default:
+    break;
   }
 });
+
+}());

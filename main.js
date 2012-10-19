@@ -1,3 +1,8 @@
+/*global console: false, require: false, process: false, Buffer: false, exports: false */
+
+(function () {
+'use strict';
+
 //
 // **dotaparser** is a replay parser for the popular warcraft3 map/standalone
 // game **dota**. It will try to gather as much information as possible from
@@ -7,7 +12,7 @@
 var zlib = require('zlib'),
     async = require('async');
 
-String.prototype.reverse = function() { return this.split("").reverse().join(""); }
+String.prototype.reverse = function() { return this.split("").reverse().join(""); };
 
 // This function reads an entire replay into the buffer, decodes the header,
 // the data (unzips it as well) and then returns a callback with the header
@@ -28,20 +33,20 @@ exports.unzip = function (data, callback) {
     csize:   data.readUInt32LE(0x0020),
     tsize:   data.readUInt32LE(0x0028),
     version: data.readUInt32LE(0x0024),
-    blocks:  data.readUInt32LE(0x002c),
+    blocks:  data.readUInt32LE(0x002c)
   };
 
-  if (header.version == 1) {
+  if (header.version === 1) {
     header.sub = {
       magic:   data.toString('ascii', 0x0030, 0x0034).reverse(),
       version: data.readUInt16LE(0x0030 + 0x0004),
       build:   data.readUInt16LE(0x0030 + 0x0008),
       flags:   data.readUInt32LE(0x0030 + 0x000A),
       length:  data.readUInt32LE(0x0030 + 0x000C),
-      crc32:   data.readUInt32LE(0x0030 + 0x0010),
+      crc32:   data.readUInt32LE(0x0030 + 0x0010)
     };
 
-  } else if (header.version == 0) {
+  } else if (header.version === 0) {
     throw "not supported";
   } else {
     throw "not supported";
@@ -55,7 +60,7 @@ exports.unzip = function (data, callback) {
   for (var i = 0; i < header.blocks; i++) {
     var block = {
       csize: data.readUInt16LE(start),
-      tsize: data.readUInt16LE(start + 0x0002),
+      tsize: data.readUInt16LE(start + 0x0002)
     };
     var end = start + 0x0008 + block.csize;
     block.cdata = data.slice(start + 0x0008, end);
@@ -81,14 +86,14 @@ exports.unzip = function (data, callback) {
     }
     callback(header, data);
   });
-}
+};
 
 // A function which helps to determine the position of the next
 // string end (\0) in a buffer.
 
 function end(data, start) {
   var i = 0;
-  while (data[start + i] != 0) {
+  while (data[start + i] !== 0) {
     i++;
   }
   return start + i;
@@ -98,8 +103,8 @@ function end(data, start) {
 function readPlayerRecord(data, start) {
   var record = {
     id:       data.readInt8(start),
-    playerid: data.readInt8(start + 0x0001),
-  }
+    playerid: data.readInt8(start + 0x0001)
+  };
 
   var s = start + 0x0002;
   var e = end(data, s);
@@ -108,11 +113,11 @@ function readPlayerRecord(data, start) {
 
   e += 2;
 
-  if (record.additional == 1) {
-  } else if (record.additional == 0) {
+  if (record.additional === 1) {
+  } else if (record.additional === 0) {
   } else {
     var error = "not supported " + record.additional;
-    throw new error;
+    throw error;
   }
   e+= record.additional;
 
@@ -131,8 +136,8 @@ function readSlotRecord(data, start) {
     team:   data.readInt8(start + 4),
     color:  data.readInt8(start + 5),
     race:   data.readInt8(start + 6),
-    ai:     data.readInt8(start + 7),
-  }
+    ai:     data.readInt8(start + 7)
+  };
 }
 
 // Reads the gamestart record.
@@ -143,8 +148,8 @@ function readGameStatRecord(data, start) {
 
   var record = {
     size:      data.readUInt16LE(start + 1),
-    slotcount: data.readInt8(start + 3),
-  }
+    slotcount: data.readInt8(start + 3)
+  };
 
   record.slots = [];
   for (var i = 0; i < record.slotcount; i++) {
@@ -174,7 +179,7 @@ exports.parseBlocks = function (buffer, callback, blockcb, endcb) {
 
     var record = readPlayerRecord(data, start);
 
-    s = start + record.size;
+    var s = start + record.size;
     e = end(data, s);
 
     var item = {
@@ -195,7 +200,7 @@ exports.parseBlocks = function (buffer, callback, blockcb, endcb) {
 
     item.game = {
       type: data.readUInt8(s),
-      flag: data.readUInt8(s + 1),
+      flag: data.readUInt8(s + 1)
     };
     s += 4;
 
@@ -237,10 +242,9 @@ exports.parseBlocks = function (buffer, callback, blockcb, endcb) {
           type: 'chat',
           playerid: data.readUInt8(s + 1),
           size: data.readUInt16LE(s + 2),
-          type: 'chat',
           flags: data.readUInt8(s + 4),
           mode:  data.readUInt32LE(s + 5),
-          text: data.toString('utf8', s + 9, e),
+          text: data.toString('utf8', s + 9, e)
         };
         s = e + 1;
         break;
@@ -250,7 +254,7 @@ exports.parseBlocks = function (buffer, callback, blockcb, endcb) {
           id: 0x1F,
           type: 'timeslot',
           size: data.readUInt16LE(s + 1),
-          inc:  data.readUInt16LE(s + 3),
+          inc:  data.readUInt16LE(s + 3)
         };
 
         if (msg.inc === undefined) {
@@ -269,7 +273,7 @@ exports.parseBlocks = function (buffer, callback, blockcb, endcb) {
           reason: data.readUInt16LE(s + 1),
           playerid: data.readUInt8(s + 2),
           result: data.readUInt16LE(s + 3)
-        }
+        };
         s += 14;
         break;
       default:
@@ -284,7 +288,7 @@ exports.parseBlocks = function (buffer, callback, blockcb, endcb) {
       endcb();
     }
   });
-}
+};
 
 // Parses the actions encoded within the messages in the blocks.
 exports.parseActions = function (buffer, callback, end) {
@@ -302,10 +306,10 @@ exports.parseActions = function (buffer, callback, end) {
         type: 'chat',
         player: {
           id:   header.meta.playerlist[msg.playerid].playerid,
-          name: header.meta.playerlist[msg.playerid].name,
+          name: header.meta.playerlist[msg.playerid].name
         },
         text: msg.text
-      }
+      };
       if (callback !== undefined) {
         callback(game, event);
       }
@@ -314,9 +318,9 @@ exports.parseActions = function (buffer, callback, end) {
       game.time += msg.inc;
     }
     if (msg.type == 'timeslot' && msg.size > 2) {
-      data = {
+      var data = {
         pid: msg.data.readUInt8(0),
-        length: msg.data.readUInt16LE(1),
+        length: msg.data.readUInt16LE(1)
       };
 
 
@@ -326,7 +330,7 @@ exports.parseActions = function (buffer, callback, end) {
       case 0x10:
         var event = {
           id: id,
-          type: 'unitbuilding',
+          type: 'unitbuilding'
         };
 
         event.player = header.meta.playerlist[data.pid];
@@ -341,7 +345,7 @@ exports.parseActions = function (buffer, callback, end) {
       case 0x13:
         var event = {
           id: id,
-          type: 'dropitem',
+          type: 'dropitem'
         };
 
         event.abilityflags = msg.data.readUInt16LE(4);
@@ -349,17 +353,17 @@ exports.parseActions = function (buffer, callback, end) {
 
         event.location = {
           x: msg.data.readUInt32LE(4 + 10),
-          y: msg.data.readUInt32LE(4 + 14),
+          y: msg.data.readUInt32LE(4 + 14)
         };
 
         event.targetobject = {
           id1: msg.data.readUInt32LE(4 + 18),
-          id2: msg.data.readUInt32LE(4 + 22),
+          id2: msg.data.readUInt32LE(4 + 22)
         };
 
         event.itemobject = {
           id1: msg.data.readUInt32LE(4 + 26),
-          id2: msg.data.readUInt32LE(4 + 30),
+          id2: msg.data.readUInt32LE(4 + 30)
         };
 
         callback(game, event);
@@ -378,7 +382,7 @@ exports.parseActions = function (buffer, callback, end) {
           event.mode = 'remove';
         }
         var n = msg.data.readUInt16LE(5);
-        var s = 6;
+        s = 6;
         event.objects = [];
         for (var i = 0; i < n; i++) {
           event.objects.push({
@@ -411,6 +415,8 @@ exports.parseActions = function (buffer, callback, end) {
       }
     }
   }, end);
-}
+};
 
 exports.data = require('./data').data;
+
+}());
