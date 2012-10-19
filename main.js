@@ -4,8 +4,7 @@
 // the replays and serve it in way which is common in javascript.
 // [http://w3g.deepnode.de/](http://w3g.deepnode.de/) played a major role in writing this parser.
 
-var fs   = require('fs'),
-    zlib = require('zlib'),
+var zlib = require('zlib'),
     async = require('async');
 
 String.prototype.reverse = function() { return this.split("").reverse().join(""); }
@@ -16,73 +15,71 @@ String.prototype.reverse = function() { return this.split("").reverse().join("")
 // While the header is already parsed and easily accessible (json), the data
 // is still raw, it is just the unzipped version.
 
-exports.unzip = function (filename, callback) {
-  fs.readFile(filename, function (err, data) {
-    // Check if the magic prefix is existent.
-    var magic = data.toString('ascii', 0, 26);
-    if (magic != 'Warcraft III recorded game') {
-      return;
-    }
+exports.unzip = function (data, callback) {
+  // Check if the magic prefix is existent.
+  var magic = data.toString('ascii', 0, 26);
+  if (magic != 'Warcraft III recorded game') {
+    return;
+  }
 
-    // Read the header details.
-    var header = {
-      offset:  data.readUInt32LE(0x001c),
-      csize:   data.readUInt32LE(0x0020),
-      tsize:   data.readUInt32LE(0x0028),
-      version: data.readUInt32LE(0x0024),
-      blocks:  data.readUInt32LE(0x002c),
+  // Read the header details.
+  var header = {
+    offset:  data.readUInt32LE(0x001c),
+    csize:   data.readUInt32LE(0x0020),
+    tsize:   data.readUInt32LE(0x0028),
+    version: data.readUInt32LE(0x0024),
+    blocks:  data.readUInt32LE(0x002c),
+  };
+
+  if (header.version == 1) {
+    header.sub = {
+      magic:   data.toString('ascii', 0x0030, 0x0034).reverse(),
+      version: data.readUInt16LE(0x0030 + 0x0004),
+      build:   data.readUInt16LE(0x0030 + 0x0008),
+      flags:   data.readUInt32LE(0x0030 + 0x000A),
+      length:  data.readUInt32LE(0x0030 + 0x000C),
+      crc32:   data.readUInt32LE(0x0030 + 0x0010),
     };
 
-    if (header.version == 1) {
-      header.sub = {
-        magic:   data.toString('ascii', 0x0030, 0x0034).reverse(),
-        version: data.readUInt16LE(0x0030 + 0x0004),
-        build:   data.readUInt16LE(0x0030 + 0x0008),
-        flags:   data.readUInt32LE(0x0030 + 0x000A),
-        length:  data.readUInt32LE(0x0030 + 0x000C),
-        crc32:   data.readUInt32LE(0x0030 + 0x0010),
-      };
-
-    } else if (header.version == 0) {
-      throw "not supported";
-    } else {
-      throw "not supported";
-    }
+  } else if (header.version == 0) {
+    throw "not supported";
+  } else {
+    throw "not supported";
+  }
 
 
-    var blocks = [];
-    var start = header.offset;
-    // Decode the header (the compressed size and the actual size)
-    // of the blocks.
-    for (var i = 0; i < header.blocks; i++) {
-      var block = {
-        csize: data.readUInt16LE(start),
-        tsize: data.readUInt16LE(start + 0x0002),
-      };
-      var end = start + 0x0008 + block.csize;
-      block.cdata = data.slice(start + 0x0008, end);
+  var blocks = [];
+  var start = header.offset;
+  // Decode the header (the compressed size and the actual size)
+  // of the blocks.
+  for (var i = 0; i < header.blocks; i++) {
+    var block = {
+      csize: data.readUInt16LE(start),
+      tsize: data.readUInt16LE(start + 0x0002),
+    };
+    var end = start + 0x0008 + block.csize;
+    block.cdata = data.slice(start + 0x0008, end);
 
-      start = end;
-      blocks.push(block);
-    }
+    start = end;
+    blocks.push(block);
+  }
 
-    // Unzip all blocks.
-    async.forEach(blocks, function (block, callback) {
-      zlib.unzip(block.cdata, function (err, buffer) {
-        if (err === null) {
-          block.data = buffer;
-        }
-        callback(err);
-      });
-    }, function (err) {
-      // Create a new buffer to hold the unzipped content.
-      var data = new Buffer(header.blocks * 8192);
-      // Put the blocks in the appropriate places in the new buffer.
-      for (var i = 0; i < header.blocks; i++) {
-        blocks[i].data.copy(data, i * 8192);
+  // Unzip all blocks.
+  async.forEach(blocks, function (block, callback) {
+    zlib.unzip(block.cdata, function (err, buffer) {
+      if (err === null) {
+        block.data = buffer;
       }
-      callback(header, data);
+      callback(err);
     });
+  }, function (err) {
+    // Create a new buffer to hold the unzipped content.
+    var data = new Buffer(header.blocks * 8192);
+    // Put the blocks in the appropriate places in the new buffer.
+    for (var i = 0; i < header.blocks; i++) {
+      blocks[i].data.copy(data, i * 8192);
+    }
+    callback(header, data);
   });
 }
 
@@ -169,8 +166,8 @@ function readGameStatRecord(data, start) {
 // which get called when a block is decoded or the end of the data is reached.
 // The header of the first callback gets extended with additional information
 // about the players.
-exports.parseBlocks = function (filename, callback, blockcb, endcb) {
-  exports.unzip(filename, function (header, data) {
+exports.parseBlocks = function (buffer, callback, blockcb, endcb) {
+  exports.unzip(buffer, function (header, data) {
     var start = 0;
 
     start += 4;
@@ -290,13 +287,13 @@ exports.parseBlocks = function (filename, callback, blockcb, endcb) {
 }
 
 // Parses the actions encoded within the messages in the blocks.
-exports.parseActions = function (filename, callback, end) {
+exports.parseActions = function (buffer, callback, end) {
   var game = {
     time: 0
   };
   var header = null;
 
-  exports.parseBlocks(filename, function (h, data) {
+  exports.parseBlocks(buffer, function (h, data) {
     header = h;
   }, function (msg) {
     //time += msg.inc;

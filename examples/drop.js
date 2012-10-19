@@ -1,6 +1,7 @@
 var dotaparser = require('../main'),
     timespan = require('timespan'),
     ansi = require('ansi'),
+    fs = require('fs'),
     cursor = ansi(process.stdout),
     print = process.stdout.write,
     fs = require('fs');
@@ -12,7 +13,7 @@ for (var i = 0; i < items.length; i++) {
   itemlist[item.Id] = item;
 }
 
-dotaparser.replay3(process.argv[2], function (game, event) {
+dotaparser.parseActions(fs.readFileSync(process.argv[2]), function (game, event) {
   if (event === undefined) {
     return;
   }

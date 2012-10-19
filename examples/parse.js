@@ -1,6 +1,7 @@
 var dotaparser = require('../main'),
     timespan = require('timespan'),
     ansi = require('ansi'),
+    fs = require('fs'),
     cursor = ansi(process.stdout),
     print = process.stdout.write;
 
@@ -21,7 +22,7 @@ function color(id) {
            '#FFC0CB', '#808080', '#ADD8E6', '#006400' ,'#A52A2A'][id];
 }
 
-dotaparser.replay3(process.argv[2], function (game, event) {
+dotaparser.parseActions(fs.readFileSync(process.argv[2]), function (game, event) {
   switch (event.type) {
   case 'chat':
     var ts = timespan.fromMilliseconds(game.time);
