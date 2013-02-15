@@ -484,7 +484,7 @@ exports.parseActions = function (buffer, callback, end) {
           event.mode = 'remove';
         }
         var n = msg.data.readUInt16LE(5);
-        s = 6;
+        s = 7;
         event.objects = [];
         for (var i = 0; i < n; i++) {
           event.objects.push({
