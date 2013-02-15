@@ -3,6 +3,91 @@
 (function () {
 'use strict';
 
+function BinaryReader(buffer, offset) {
+  if (!Buffer.isBuffer(buffer)) {
+    return null;
+  }
+  if (offset === undefined || offset === null) {
+    offset = 0;
+  }
+
+  this.offset = offset;
+  this.buffer = new Buffer(buffer);
+}
+
+BinaryReader.prototype.skip = function (count) {
+  this.buffer.offset += count;
+}
+
+BinaryReader.prototype.read = function (func, size, offset) {
+  if (offset === undefined) {
+    var off = this.offset;
+  } else {
+    var off = offset;
+  }
+  if (typeof func === 'string') {
+    var result = this.buffer[func](off);
+  } else {
+    var result = func(off);
+  }
+  if (offset === undefined) {
+    this.offset += size;
+  }
+  return result;
+}
+
+BinaryReader.prototype.readUInt16LE = function (offset) {
+  return this.read('readUInt16LE', 2, offset);
+};
+
+BinaryReader.prototype.readUInt32LE = function (offset) {
+  return this.read('readUInt32LE', 4, offset);
+};
+
+BinaryReader.prototype.readItemID = function (offset) {
+  var that = this;
+  return this.read(function (off) {
+    var type = that.buffer.readUInt16LE(off + 2);
+    var result = null;
+    if (type == 13) {
+      result = that.buffer.readInt16LE(off);
+    } else {
+      throw new "not supported";
+    }
+    return result;
+  }, 4, offset);
+}
+
+BinaryReader.prototype.readFloatLE = function (offset) {
+  return this.read('readFloatLE', 4, offset);
+}
+
+BinaryReader.prototype.readFloatBE = function (offset) {
+  return this.read('readFlaotBE', 4, offset);
+}
+
+BinaryReader.prototype.readPoint = function (func, size, offset) {
+  var that = this;
+  return this.read(function (off) {
+    return {
+      x: that[func](off),
+      y: that[func](off + 4)
+    };
+  }, size, offset);
+};
+
+BinaryReader.prototype.readPointFloatLE = function (offset) {
+  return this.readPoint('readFloatLE', 8, offset);
+}
+
+BinaryReader.prototype.readPointFloatBE = function (offset) {
+  return this.readPoint('readFloatBE', 8, offset);
+}
+
+BinaryReader.prototype.readPointUInt32LE = function (offset) {
+  return this.readPoint('readUInt32LE', 8, offset);
+}
+
 //
 // **dotaparser** is a replay parser for the popular warcraft3 map/standalone
 // game **dota**. It will try to gather as much information as possible from
@@ -119,7 +204,7 @@ function readPlayerRecord(data, start) {
     var error = "not supported " + record.additional;
     throw error;
   }
-  e+= record.additional;
+  e += record.additional;
 
   record.size = e - start;
 
@@ -257,9 +342,6 @@ exports.parseBlocks = function (buffer, callback, blockcb, endcb) {
           inc:  data.readUInt16LE(s + 3)
         };
 
-        if (msg.inc === undefined) {
-        }
-
         var offset = 5;
         if (msg.size > 2) {
           msg.data = data.slice(s + offset, s + offset + msg.size - 2);
@@ -276,9 +358,17 @@ exports.parseBlocks = function (buffer, callback, blockcb, endcb) {
         };
         s += 14;
         break;
+      case 0x22:
+        msg = {
+          id: 0x22,
+          length: data.readUInt8(s + 1),
+        };
+        s += 2 + msg.length;
+        break;
       default:
         throw 'not supported: ' + id;
       }
+
 
       if (!done && msg !== null) {
         blockcb(msg);
@@ -325,6 +415,7 @@ exports.parseActions = function (buffer, callback, end) {
 
 
       var id = msg.data.readUInt8(3);
+      var br = new BinaryReader(msg.data, 4);
       var s = 4;
       switch (id) {
       case 0x10:
@@ -339,6 +430,18 @@ exports.parseActions = function (buffer, callback, end) {
         callback(game, event);
         break;
       case 0x11:
+        var event = {
+          id: id,
+          type: 'pointorder'
+        };
+
+        event.player = header.meta.playerlist[data.pid];
+
+        event.abilityflags = br.readUInt16LE();
+        event.itemid = br.readItemID();
+        br.offset += 2 * 4; // ignoring two unknown fields
+
+        event.location = br.readPointFloatLE();
         break;
       case 0x12:
         break;
@@ -348,22 +451,21 @@ exports.parseActions = function (buffer, callback, end) {
           type: 'dropitem'
         };
 
-        event.abilityflags = msg.data.readUInt16LE(4);
-        event.itemid       = msg.data.toString('ascii', 4 + 2, 4 + 2 + 4).reverse();
+        event.abilityflags = br.readUInt16LE();
+        event.itemid = br.readItemID();
 
-        event.location = {
-          x: msg.data.readUInt32LE(4 + 10),
-          y: msg.data.readUInt32LE(4 + 14)
-        };
+        br.offset += 8;
+
+        event.location = br.readPointFloatLE();
 
         event.targetobject = {
-          id1: msg.data.readUInt32LE(4 + 18),
-          id2: msg.data.readUInt32LE(4 + 22)
+          id1: br.readUInt32LE(),
+          id2: br.readUInt32LE()
         };
 
         event.itemobject = {
-          id1: msg.data.readUInt32LE(4 + 26),
-          id2: msg.data.readUInt32LE(4 + 30)
+          id1: br.readUInt32LE(),
+          id2: br.readUInt32LE()
         };
 
         callback(game, event);
