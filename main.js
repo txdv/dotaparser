@@ -416,10 +416,29 @@ function parseActions(id, br, header, data) {
   };
   var event = null;
   switch (id) {
+  case 0x01:
+    event = {
+      id: id,
+      type: 'PauseGame'
+    };
+    break;
   case 0x02:
     event = {
       id: id,
       type: 'ResumeGame'
+    };
+    break;
+  case 0x05:
+    event = {
+      id: id,
+      type: 'DecreaseGameSpeed'
+    };
+    break;
+  case 0x07:
+    event = {
+      id: id,
+      type: 'SaveGameFinished',
+      unknown: br.readUInt32LE()
     };
     break;
   case 0x10:
@@ -438,7 +457,7 @@ function parseActions(id, br, header, data) {
     };
     break;
   case 0x13:
-    var event = {
+    event = {
       id: id,
       type: 'dropitem'
     };
@@ -462,10 +481,16 @@ function parseActions(id, br, header, data) {
 
     break;
   case 0x14:
-    event = {
-      id: id,
-      type: 'unitbuilding4'
-    }
+    event = readBuilding(4);
+    event.location = br.readPointFloatLE();
+    event.object = {
+      id1: br.readUInt32LE(),
+      id2: br.readUInt32LE()
+    };
+
+    event.itemid2 = br.spliceString('ascii', 4).reverse();
+    event.location2 = br.readPointFloatLE();
+    br.skip(9);
     break;
   case 0x16:
     event = {
@@ -501,9 +526,18 @@ function parseActions(id, br, header, data) {
         id2: br.readUInt32LE()
       });
     }
-  break;
+    break;
+  case 0x18:
+    event = {
+      id: id,
+      type: 'SelectGroupHotkey',
+      group: br.readUInt8(),
+      unknown: br.readUInt8()
+    };
+    break;
   case 0x19:
     event = {
+      id: id,
       type: 'SelectSubgroup',
       itemid: br.readUInt32LE(),
       objid1: br.readUInt32LE(),
@@ -525,6 +559,23 @@ function parseActions(id, br, header, data) {
       id2: br.readUInt32LE()
     };
     break;
+  case 0x1C:
+    event = {
+      id: id,
+      type: 'SelectGroundItem',
+      unknown: br.readUInt8(),
+      id1: br.readUInt32LE(),
+      id2: br.readUInt32LE()
+    };
+    break;
+  case 0x28:
+    event = {
+      id: id,
+      type: 'LeafitToMe',
+      unknown: br.readUInt8(),
+      amount: br.readUInt32LE()
+    };
+    break;
   case 0x50:
     event = {
       id: id,
@@ -542,22 +593,18 @@ function parseActions(id, br, header, data) {
       string: br.readString()
     };
     break;
-  case 0x61:
-    event = {
-      id: id,
-      type: 'esc'
-    };
-    break;
   case 0x66:
     event = {
       id: id,
-      type: 'skillsubmenu'
+      type: 'EnterChooseHeroSkillSubmenu'
     };
     break;
   case 0x68:
     event = {
       id: id,
-      type: 'ping'
+      x: br.readUInt32LE(),
+      y: br.readUInt32LE(),
+      unknown: br.readUInt32LE()
     };
     break;
   case 0x6b:
@@ -570,6 +617,13 @@ function parseActions(id, br, header, data) {
       value: br.readUInt32LE()
     };
     break;
+  case 0x75: {
+    event = {
+      id: id,
+      type: 'Unknown'
+    };
+    break;
+  }
   default:
     console.log('unhandled: ' + id);
     break;
@@ -605,13 +659,14 @@ exports.parseActions = function (buffer, callback, end) {
       game.time += msg.inc;
     }
     if (msg.type == 'timeslot' && msg.size > 2) {
+      var br = new BinaryReader(msg.data);
+
       var data = {
-        pid: msg.data.readUInt8(0),
-        length: msg.data.readUInt16LE(1)
+        pid: br.readUInt8(),
+        length: br.readUInt16LE()
       };
 
-      var br = new BinaryReader(msg.data, 3);
-      while (br.offset < br.buffer.length) {
+      while (br.offset < data.length) {
         var id = br.readUInt8();
         callback(game, parseActions(id, br, header, data));
       }
