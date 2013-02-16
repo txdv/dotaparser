@@ -124,7 +124,9 @@ BinaryReader.prototype.readString = function (offset, encoding) {
 }
 
 BinaryReader.prototype.spliceString = function (encoding, length) {
-  return this.buffer.toString(encoding, this.offset, this.offset + length);
+  var ret = this.buffer.toString(encoding, this.offset, this.offset + length);
+  this.skip(length);
+  return ret;
 }
 
 //
@@ -351,8 +353,8 @@ exports.parseBlocks = function (buffer, callback, blockcb, endcb) {
           unknown:  br.readUInt16LE()
         };
         break;
-      case 0x1e:
-      case 0x1f:
+      case 0x1E:
+      case 0x1F:
         msg = {
           id: 0x1F,
           type: 'timeslot',
@@ -398,6 +400,184 @@ exports.parseBlocks = function (buffer, callback, blockcb, endcb) {
   });
 };
 
+function parseActions(id, br, header, data) {
+  function readBuilding(type) {
+    var event = {
+      id: id,
+      type: 'unitbuilding' + type
+    };
+
+    event.player = header.meta.playerlist[data.pid];
+    event.abilityflag = br.readUInt16LE();
+    event.itemid = br.spliceString('ascii', 4).reverse();
+    //event.itemid = br.readItemID();
+    br.skip(2 * 4);
+    return event;
+  };
+  var event = null;
+  switch (id) {
+  case 0x02:
+    event = {
+      id: id,
+      type: 'ResumeGame'
+    };
+    break;
+  case 0x10:
+    event = readBuilding(1);
+    break;
+  case 0x11:
+    event = readBuilding(1);
+    event.location = br.readPointFloatLE();
+    break;
+  case 0x12:
+    event = readBuilding(3);
+    event.location = br.readPointFloatLE();
+    event.object = {
+      id1: br.readUInt32LE(),
+      id2: br.readUInt32LE()
+    };
+    break;
+  case 0x13:
+    var event = {
+      id: id,
+      type: 'dropitem'
+    };
+
+    event.abilityflags = br.readUInt16LE();
+    event.itemid = br.readItemID();
+
+    br.skip(8);
+
+    event.location = br.readPointFloatLE();
+
+    event.targetobject = {
+      id1: br.readUInt32LE(),
+      id2: br.readUInt32LE()
+    };
+
+    event.itemobject = {
+      id1: br.readUInt32LE(),
+      id2: br.readUInt32LE()
+    };
+
+    break;
+  case 0x14:
+    event = {
+      id: id,
+      type: 'unitbuilding4'
+    }
+    break;
+  case 0x16:
+    event = {
+      id: id,
+      type: 'selection'
+    };
+
+    if (br.readUInt8() == 1) {
+      event.mode = 'add';
+    } else {
+      event.mode = 'remove';
+    }
+    var n = br.readUInt16LE();
+    event.objects = [];
+    for (var i = 0; i < n; i++) {
+      event.objects.push({
+        id1: br.readUInt32LE(),
+        id2: br.readUInt32LE()
+      });
+    }
+    break;
+  case 0x17:
+    event = {
+      id: id,
+      type: 'assigngroup'
+    };
+    event.number = br.readUInt8();
+    event.count = br.readUInt16LE();
+    event.groups = [];
+    for (var i = 0; i < event.count; i++) {
+      event.groups.push({
+        id1: br.readUInt32LE(),
+        id2: br.readUInt32LE()
+      });
+    }
+  break;
+  case 0x19:
+    event = {
+      type: 'SelectSubgroup',
+      itemid: br.readUInt32LE(),
+      objid1: br.readUInt32LE(),
+      objid2: br.readUInt32LE(),
+    };
+    break;
+  case 0x1A:
+    event = {
+      id: id,
+      type: 'presubselection'
+    };
+    break;
+  case 0x1B:
+    event = {
+      id: id,
+      type: 'unknown1',
+      field1: br.readUInt8(),
+      id1: br.readUInt32LE(),
+      id2: br.readUInt32LE()
+    };
+    break;
+  case 0x50:
+    event = {
+      id: id,
+      type: 'ChangeAlly',
+      slot: br.readUInt8(),
+      flags: br.readUInt32LE()
+    };
+    break;
+  case 0x60:
+    event = {
+      id: id,
+      type: 'MapTriggerChatCommand',
+      unknown1: br.readUInt32LE(),
+      unknown2: br.readUInt32LE(),
+      string: br.readString()
+    };
+    break;
+  case 0x61:
+    event = {
+      id: id,
+      type: 'esc'
+    };
+    break;
+  case 0x66:
+    event = {
+      id: id,
+      type: 'skillsubmenu'
+    };
+    break;
+  case 0x68:
+    event = {
+      id: id,
+      type: 'ping'
+    };
+    break;
+  case 0x6b:
+    event = {
+      id: id,
+      type: 'SyncStoredInteger',
+      file: br.readString(),
+      group: br.readString(),
+      key: br.readString(),
+      value: br.readUInt32LE()
+    };
+    break;
+  default:
+    console.log('unhandled: ' + id);
+    break;
+  }
+
+  return event;
+}
+
 // Parses the actions encoded within the messages in the blocks.
 exports.parseActions = function (buffer, callback, end) {
   var game = {
@@ -430,146 +610,10 @@ exports.parseActions = function (buffer, callback, end) {
         length: msg.data.readUInt16LE(1)
       };
 
-      var id = msg.data.readUInt8(3);
-      var br = new BinaryReader(msg.data, 4);
-      var event = null;
-      switch (id) {
-      case 0x10:
-        event = {
-          id: id,
-          type: 'unitbuilding1'
-        };
-
-        event.player = header.meta.playerlist[data.pid];
-        event.abilityflag = br.readUInt16LE();
-        event.itemid = br.spliceString('ascii', 4).reverse();
-        break;
-      case 0x11:
-        var event = {
-          id: id,
-          type: 'unitbuilding2'
-        };
-
-        event.player = header.meta.playerlist[data.pid];
-
-        event.abilityflags = br.readUInt16LE();
-        event.itemid = br.readItemID();
-        br.skip(2 * 4); // igore 2 unknown fields
-        event.location = br.readPointFloatLE();
-        break;
-      case 0x12:
-        event = {
-          id: id,
-          type: 'unitbuilding3'
-        };
-        break;
-      case 0x13:
-        var event = {
-          id: id,
-          type: 'dropitem'
-        };
-
-        event.abilityflags = br.readUInt16LE();
-        event.itemid = br.readItemID();
-
-        br.skip(8);
-
-        event.location = br.readPointFloatLE();
-
-        event.targetobject = {
-          id1: br.readUInt32LE(),
-          id2: br.readUInt32LE()
-        };
-
-        event.itemobject = {
-          id1: br.readUInt32LE(),
-          id2: br.readUInt32LE()
-        };
-
-        break;
-      case 0x14:
-        event = {
-          id: id,
-          type: 'unitbuilding4'
-        }
-        break;
-      case 0x16:
-        event = {
-          id: id,
-          type: 'selection'
-        };
-
-        if (br.readUInt8() == 1) {
-          event.mode = 'add';
-        } else {
-          event.mode = 'remove';
-        }
-        var n = br.readUInt16LE();
-        event.objects = [];
-        for (var i = 0; i < n; i++) {
-          event.objects.push({
-            id1: br.readUInt32LE(),
-            id2: br.readUInt32LE()
-          });
-        }
-        break;
-      case 0x17:
-        event = {
-          id: id,
-          type: 'assigngroup'
-        };
-        event.number = br.readUInt8();
-        event.count = br.readUInt16LE();
-        event.groups = [];
-        for (var i = 0; i < event.count; i++) {
-          event.groups.push({
-            id1: br.readUInt32LE(),
-            id2: br.readUInt32LE()
-          });
-        }
-      break;
-      case 0x1A:
-        event = {
-          id: id,
-          type: 'presubselection'
-        };
-        break;
-      case 0x1B:
-        event = {
-          id: id,
-          type: 'unknown1'
-        };
-        break;
-      case 0x60:
-        event = {
-          id: id,
-          type: 'maptriggerchatcommand'
-        };
-        break;
-      case 0x61:
-        event = {
-          id: id,
-          type: 'esc'
-        };
-        break;
-      case 0x66:
-        event = {
-          id: id,
-          type: 'skillsubmenu'
-        };
-        break;
-      case 0x68:
-        event = {
-          id: id,
-          type: 'ping'
-        };
-        break;
-      default:
-        console.log('unhandled: ' + id);
-        break;
-      }
-      if (event !== null) {
-        callback(game, event);
+      var br = new BinaryReader(msg.data, 3);
+      while (br.offset < br.buffer.length) {
+        var id = br.readUInt8();
+        callback(game, parseActions(id, br, header, data));
       }
     }
   }, end);
