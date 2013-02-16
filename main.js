@@ -123,6 +123,10 @@ BinaryReader.prototype.readString = function (offset, encoding) {
   return this.buffer.toString(encoding, start, end);
 }
 
+BinaryReader.prototype.spliceString = function (encoding, length) {
+  return this.buffer.toString(encoding, this.offset, this.offset + length);
+}
+
 //
 // **dotaparser** is a replay parser for the popular warcraft3 map/standalone
 // game **dota**. It will try to gather as much information as possible from
@@ -428,7 +432,6 @@ exports.parseActions = function (buffer, callback, end) {
 
       var id = msg.data.readUInt8(3);
       var br = new BinaryReader(msg.data, 4);
-      var s = 4;
       var event = null;
       switch (id) {
       case 0x10:
@@ -438,8 +441,8 @@ exports.parseActions = function (buffer, callback, end) {
         };
 
         event.player = header.meta.playerlist[data.pid];
-        event.abilityflag = msg.data.readUInt16LE(4);
-        event.itemid = msg.data.toString('ascii', 6, 10).reverse();
+        event.abilityflag = br.readUInt16LE();
+        event.itemid = br.spliceString('ascii', 4).reverse();
         break;
       case 0x11:
         var event = {
@@ -451,8 +454,7 @@ exports.parseActions = function (buffer, callback, end) {
 
         event.abilityflags = br.readUInt16LE();
         event.itemid = br.readItemID();
-        br.offset += 2 * 4; // ignoring two unknown fields
-
+        br.skip(2 * 4); // igore 2 unknown fields
         event.location = br.readPointFloatLE();
         break;
       case 0x12:
@@ -470,7 +472,7 @@ exports.parseActions = function (buffer, callback, end) {
         event.abilityflags = br.readUInt16LE();
         event.itemid = br.readItemID();
 
-        br.offset += 8;
+        br.skip(8);
 
         event.location = br.readPointFloatLE();
 
@@ -497,20 +499,18 @@ exports.parseActions = function (buffer, callback, end) {
           type: 'selection'
         };
 
-        if (msg.data.readUInt8(4) == 1) {
+        if (br.readUInt8() == 1) {
           event.mode = 'add';
         } else {
           event.mode = 'remove';
         }
-        var n = msg.data.readUInt16LE(5);
-        s = 7;
+        var n = br.readUInt16LE();
         event.objects = [];
         for (var i = 0; i < n; i++) {
           event.objects.push({
-            id1: msg.data.readUInt32LE(s),
-            id2: msg.data.readUInt32LE(s + 4)
+            id1: br.readUInt32LE(),
+            id2: br.readUInt32LE()
           });
-          s += 8;
         }
         break;
       case 0x17:
@@ -518,6 +518,15 @@ exports.parseActions = function (buffer, callback, end) {
           id: id,
           type: 'assigngroup'
         };
+        event.number = br.readUInt8();
+        event.count = br.readUInt16LE();
+        event.groups = [];
+        for (var i = 0; i < event.count; i++) {
+          event.groups.push({
+            id1: br.readUInt32LE(),
+            id2: br.readUInt32LE()
+          });
+        }
       break;
       case 0x1A:
         event = {
@@ -556,10 +565,7 @@ exports.parseActions = function (buffer, callback, end) {
         };
         break;
       default:
-        event = {
-          id: id,
-          type: 'unknown'
-        }
+        console.log('unhandled: ' + id);
         break;
       }
       if (event !== null) {
