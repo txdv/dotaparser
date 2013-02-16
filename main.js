@@ -36,6 +36,14 @@ BinaryReader.prototype.read = function (func, size, offset) {
   return result;
 }
 
+BinaryReader.prototype.readInt8 = function (offset) {
+  return this.read('readInt8', 1, offset);
+}
+
+BinaryReader.prototype.readUInt8 = function (offset) {
+  return this.read('readUInt8', 1, offset);
+}
+
 BinaryReader.prototype.readUInt16LE = function (offset) {
   return this.read('readUInt16LE', 2, offset);
 };
@@ -86,6 +94,33 @@ BinaryReader.prototype.readPointFloatBE = function (offset) {
 
 BinaryReader.prototype.readPointUInt32LE = function (offset) {
   return this.readPoint('readUInt32LE', 8, offset);
+}
+
+BinaryReader.prototype.readString = function (offset, encoding) {
+  var start;
+  if (typeof offset === 'undefined') {
+    start = this.offset;
+  } else {
+    start = offset;
+  }
+
+  var i = 0;
+
+  while (this.buffer[start + i] !== 0) {
+    i++;
+  }
+
+  var end = start + i;
+
+  if (typeof offset === 'undefined') {
+    this.offset += i + 1;
+  }
+
+  if (encoding === 'udnefined') {
+    encoding = 'ascii';
+  }
+
+  return this.buffer.toString(encoding, start, end);
 }
 
 //
@@ -185,69 +220,61 @@ function end(data, start) {
 }
 
 // Reads the entire player record.
-function readPlayerRecord(data, start) {
+BinaryReader.prototype.readPlayerRecord = function (offset) {
+  var start = this.offset;
+
   var record = {
-    id:       data.readInt8(start),
-    playerid: data.readInt8(start + 0x0001)
-  };
-
-  var s = start + 0x0002;
-  var e = end(data, s);
-  record.name = data.toString('ascii', s, e);
-  record.additional = data[e + 1];
-
-  e += 2;
-
-  if (record.additional === 1) {
-  } else if (record.additional === 0) {
-  } else {
-    var error = "not supported " + record.additional;
-    throw error;
+    id:         this.readInt8(),
+    playerid:   this.readInt8(),
+    name:       this.readString(),
+    additional: this.readInt8()
   }
-  e += record.additional;
 
-  record.size = e - start;
+  this.skip(record.additional);
+  record.size = this.offset - start;
+
+  if (typeof offset !== 'undefined') {
+    this.offset = start;
+  }
 
   return record;
 }
 
-// Reads a slot record.
-function readSlotRecord(data, start) {
+BinaryReader.prototype.readSlotRecord = function () {
   return {
-    id:     data.readInt8(start),
-    pct:    data.readInt8(start + 1),
-    status: data.readInt8(start + 2),
-    flag:   data.readInt8(start + 3),
-    team:   data.readInt8(start + 4),
-    color:  data.readInt8(start + 5),
-    race:   data.readInt8(start + 6),
-    ai:     data.readInt8(start + 7)
+    id:     this.readInt8(),
+    pct:    this.readInt8(),
+    status: this.readInt8(),
+    flag:   this.readInt8(),
+    team:   this.readInt8(),
+    color:  this.readInt8(),
+    race:   this.readInt8(),
+    ai:     this.readInt8(),
+    hi:     this.readInt8()
   };
 }
 
-// Reads the gamestart record.
-function readGameStatRecord(data, start) {
-  if (data.readInt8(start) != 25) {
+BinaryReader.prototype.readGameStartRecord = function () {
+  if (this.readInt8(this.offset) != 0x19) {
     throw "not a gamestat record";
+  } else {
+    this.skip(1);
   }
 
   var record = {
-    size:      data.readUInt16LE(start + 1),
-    slotcount: data.readInt8(start + 3)
+    size:      this.readUInt16LE(),
+    slotcount: this.readInt8()
   };
 
   record.slots = [];
   for (var i = 0; i < record.slotcount; i++) {
-    record.slots.push(readSlotRecord(data, start + 4 + i * 9));
+    record.slots.push(this.readSlotRecord());
   }
 
-  var s = start + 4 + record.slotcount * 9;
+  record.seed = this.readUInt32LE();
+  record.mode = this.readUInt8();
+  record.startspotcount = this.readUInt8();
 
-  record.seed = data.readUInt32LE(s);
-  record.mode = data.readUInt8(s + 4);
-  record.startspotcount = data.readUInt8(s + 5);
-
-  record.end = s + 6;
   return record;
 }
 
@@ -258,51 +285,41 @@ function readGameStatRecord(data, start) {
 // about the players.
 exports.parseBlocks = function (buffer, callback, blockcb, endcb) {
   exports.unzip(buffer, function (header, data) {
-    var start = 0;
+    var br = new BinaryReader(data);
+    br.skip(4);
 
-    start += 4;
-
-    var record = readPlayerRecord(data, start);
-
-    var s = start + record.size;
-    e = end(data, s);
+    //var record = readPlayerRecord(br.buffer, br.offset);
+    //br.skip(record.size);
+    var record = br.readPlayerRecord();
 
     var item = {
       record: record,
-      gamename: data.toString('ascii', s, e)
-    };
+      gamename: br.readString()
+    }
 
-    s += e + 1; // avoiding nullbyte
-    e = end(data, s);
-
-    // do something with the encoded string (4.3)
-
-    s = e + 1;
+    br.skip(1); // Skip nullbyte
+    br.readString(); // Skip encoded string (4.3)
 
     // 4.6
-    item.playercount = data.readUInt32LE(s);
-    s += 4;
+    item.playercount = br.readUInt32LE();
 
     item.game = {
-      type: data.readUInt8(s),
-      flag: data.readUInt8(s + 1)
-    };
-    s += 4;
+      type: br.readUInt8(),
+      flag: br.readUInt8(),
+      unknown: br.readUInt16LE()
+    }
 
-    item.lang = data.readUInt32LE(s);
-    s += 4;
+    item.lang = br.readUInt32LE();
 
     item.playerlist = [];
     item.playerlist[item.record.playerid] = item.record;
-    for (var i = 0; i < 20; i++) {
-      var player = readPlayerRecord(data, s);
-      if (player.size != 4) {
-        item.playerlist[player.playerid] = player;
-      }
-      s += player.size;
+
+    while (br.readInt8(br.offset) == 0x16) {
+      item.playerlist.push(br.readPlayerRecord());
+      br.readUInt32LE();
     }
-    item.gamestart = readGameStatRecord(data, s);
-    s = item.gamestart.end;
+
+    item.gamestart = br.readGameStartRecord();
 
     header.meta = item;
     callback(header, data);
@@ -310,7 +327,7 @@ exports.parseBlocks = function (buffer, callback, blockcb, endcb) {
     var done = false;
     while (!done) {
       var msg = null;
-      var id = data.readUInt8(s);
+      var id = br.readUInt8();
       switch (id) {
       case 0x00:
         done = true;
@@ -318,62 +335,59 @@ exports.parseBlocks = function (buffer, callback, blockcb, endcb) {
       case 0x1A:
       case 0x1B:
       case 0x1C:
-        s += 5;
-        break;
-      case 0x20: // chat
-        var e = end(data, s + 9);
-        msg = {
-          id: 0x20,
-          type: 'chat',
-          playerid: data.readUInt8(s + 1),
-          size: data.readUInt16LE(s + 2),
-          flags: data.readUInt8(s + 4),
-          mode:  data.readUInt32LE(s + 5),
-          text: data.toString('utf8', s + 9, e)
-        };
-        s = e + 1;
-        break;
-      case 0x1e:
-      case 0x1f: // timeslot
-        msg = {
-          id: 0x1F,
-          type: 'timeslot',
-          size: data.readUInt16LE(s + 1),
-          inc:  data.readUInt16LE(s + 3)
-        };
-
-        var offset = 5;
-        if (msg.size > 2) {
-          msg.data = data.slice(s + offset, s + offset + msg.size - 2);
-        }
-        s += msg.size + 3;
+        br.skip(4);
         break;
       case 0x17:
         msg = {
           id: 0x17,
           type: 'leave',
-          reason: data.readUInt16LE(s + 1),
-          playerid: data.readUInt8(s + 2),
-          result: data.readUInt16LE(s + 3)
+          reason:   br.readUInt16LE(),
+          playerid: br.readUInt8(),
+          result:   br.readUInt16LE(),
+          unknown:  br.readUInt16LE()
         };
-        s += 14;
+        break;
+      case 0x1e:
+      case 0x1f:
+        msg = {
+          id: 0x1F,
+          type: 'timeslot',
+          size: br.readUInt16LE(),
+          inc: br.readUInt16LE()
+        };
+
+        if (msg.size > 2) {
+          msg.data = br.buffer.slice(br.offset, br.offset + msg.size - 2);
+        }
+        br.skip(msg.size - 2);
+        break;
+      case 0x20:
+        msg = {
+          id: 0x20,
+          type: 'chat',
+          playerid: br.readUInt8(),
+          size:  br.readUInt16LE(),
+          flags: br.readUInt8(),
+          mode:  br.readUInt32LE(),
+          text:  br.readString(),
+        };
         break;
       case 0x22:
         msg = {
           id: 0x22,
-          length: data.readUInt8(s + 1),
+          length: br.readUInt8(),
         };
-        s += 2 + msg.length;
+        br.skip(msg.length);
         break;
       default:
-        throw 'not supported: ' + id;
+        throw 'not supported ' + id;
+        break;
       }
-
-
       if (!done && msg !== null) {
         blockcb(msg);
       }
     }
+
     if (endcb !== undefined) {
       endcb();
     }
