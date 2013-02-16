@@ -16,7 +16,7 @@ function BinaryReader(buffer, offset) {
 }
 
 BinaryReader.prototype.skip = function (count) {
-  this.buffer.offset += count;
+  this.offset += count;
 }
 
 BinaryReader.prototype.read = function (func, size, offset) {
