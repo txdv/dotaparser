@@ -404,7 +404,6 @@ exports.parseActions = function (buffer, callback, end) {
   exports.parseBlocks(buffer, function (h, data) {
     header = h;
   }, function (msg) {
-    //time += msg.inc;
     if (msg.type == 'chat') {
       var event = {
         type: 'chat',
@@ -427,26 +426,25 @@ exports.parseActions = function (buffer, callback, end) {
         length: msg.data.readUInt16LE(1)
       };
 
-
       var id = msg.data.readUInt8(3);
       var br = new BinaryReader(msg.data, 4);
       var s = 4;
+      var event = null;
       switch (id) {
       case 0x10:
-        var event = {
+        event = {
           id: id,
-          type: 'unitbuilding'
+          type: 'unitbuilding1'
         };
 
         event.player = header.meta.playerlist[data.pid];
         event.abilityflag = msg.data.readUInt16LE(4);
         event.itemid = msg.data.toString('ascii', 6, 10).reverse();
-        callback(game, event);
         break;
       case 0x11:
         var event = {
           id: id,
-          type: 'pointorder'
+          type: 'unitbuilding2'
         };
 
         event.player = header.meta.playerlist[data.pid];
@@ -458,6 +456,10 @@ exports.parseActions = function (buffer, callback, end) {
         event.location = br.readPointFloatLE();
         break;
       case 0x12:
+        event = {
+          id: id,
+          type: 'unitbuilding3'
+        };
         break;
       case 0x13:
         var event = {
@@ -482,12 +484,15 @@ exports.parseActions = function (buffer, callback, end) {
           id2: br.readUInt32LE()
         };
 
-        callback(game, event);
         break;
       case 0x14:
+        event = {
+          id: id,
+          type: 'unitbuilding4'
+        }
         break;
       case 0x16:
-        var event = {
+        event = {
           id: id,
           type: 'selection'
         };
@@ -507,27 +512,58 @@ exports.parseActions = function (buffer, callback, end) {
           });
           s += 8;
         }
-        callback(game, event);
         break;
       case 0x17:
+        event = {
+          id: id,
+          type: 'assigngroup'
+        };
+      break;
+      case 0x1A:
+        event = {
+          id: id,
+          type: 'presubselection'
+        };
         break;
-      case 0x1a:
-        break;
-      case 0x1b:
+      case 0x1B:
+        event = {
+          id: id,
+          type: 'unknown1'
+        };
         break;
       case 0x60:
+        event = {
+          id: id,
+          type: 'maptriggerchatcommand'
+        };
         break;
       case 0x61:
+        event = {
+          id: id,
+          type: 'esc'
+        };
         break;
       case 0x66:
+        event = {
+          id: id,
+          type: 'skillsubmenu'
+        };
         break;
       case 0x68:
-        break;
-      case 0x6b:
+        event = {
+          id: id,
+          type: 'ping'
+        };
         break;
       default:
-        console.log("unhandled: " + id);
+        event = {
+          id: id,
+          type: 'unknown'
+        }
         break;
+      }
+      if (event !== null) {
+        callback(game, event);
       }
     }
   }, end);
