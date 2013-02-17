@@ -53,6 +53,7 @@ BinaryReader.prototype.readUInt32LE = function (offset) {
 };
 
 BinaryReader.prototype.readItemID = function (offset) {
+  return this.spliceString('ascii', 4).reverse();
   var that = this;
   return this.read(function (off) {
     var type = that.buffer.readUInt16LE(off + 2);
@@ -400,6 +401,18 @@ exports.parseBlocks = function (buffer, callback, blockcb, endcb) {
   });
 };
 
+BinaryReader.prototype.readUInt64LE = function () {
+  return (this.readUInt32LE() * Math.pow(2, 32)) + this.readUInt32LE();
+}
+
+function hex(number, length) {
+  var ret = number.toString(16);
+  while (ret.length < length) {
+    ret = '0' + ret;
+  }
+  return '0x' + ret;
+}
+
 function parseActions(id, br, header, data) {
   function readBuilding(type) {
     var event = {
@@ -408,9 +421,8 @@ function parseActions(id, br, header, data) {
     };
 
     event.player = header.meta.playerlist[data.pid];
-    event.abilityflag = br.readUInt16LE();
-    event.itemid = br.spliceString('ascii', 4).reverse();
-    //event.itemid = br.readItemID();
+    event.flags = br.readUInt16LE();
+    event.item = br.readItemID();
     br.skip(2 * 4);
     return event;
   };
@@ -451,51 +463,31 @@ function parseActions(id, br, header, data) {
   case 0x12:
     event = readBuilding(3);
     event.location = br.readPointFloatLE();
-    event.object = {
-      id1: br.readUInt32LE(),
-      id2: br.readUInt32LE()
-    };
+    event.object_id = br.readUInt64LE();
     break;
   case 0x13:
     event = {
       id: id,
-      type: 'dropitem'
+      type: 'DropItem',
+      flags: br.readUInt16LE(),
+      item: br.readItemID(),
+      unknown: br.readUInt64LE(),
+      location: br.readPointFloatLE(),
+      target_object_id: br.readUInt64LE(),
+      item_object_id:   br.readUInt64LE()
     };
-
-    event.abilityflags = br.readUInt16LE();
-    event.itemid = br.readItemID();
-
-    br.skip(8);
-
-    event.location = br.readPointFloatLE();
-
-    event.targetobject = {
-      id1: br.readUInt32LE(),
-      id2: br.readUInt32LE()
-    };
-
-    event.itemobject = {
-      id1: br.readUInt32LE(),
-      id2: br.readUInt32LE()
-    };
-
     break;
   case 0x14:
     event = readBuilding(4);
     event.location = br.readPointFloatLE();
-    event.object = {
-      id1: br.readUInt32LE(),
-      id2: br.readUInt32LE()
-    };
-
-    event.itemid2 = br.spliceString('ascii', 4).reverse();
-    event.location2 = br.readPointFloatLE();
+    event.sitem = br.readItemID();
     br.skip(9);
+    event.slocation = br.readPointFloatLE();
     break;
   case 0x16:
     event = {
       id: id,
-      type: 'selection'
+      type: 'Selection'
     };
 
     if (br.readUInt8() == 1) {
@@ -506,10 +498,7 @@ function parseActions(id, br, header, data) {
     var n = br.readUInt16LE();
     event.objects = [];
     for (var i = 0; i < n; i++) {
-      event.objects.push({
-        id1: br.readUInt32LE(),
-        id2: br.readUInt32LE()
-      });
+      event.objects.push(br.readUInt64LE());
     }
     break;
   case 0x17:
@@ -539,22 +528,21 @@ function parseActions(id, br, header, data) {
     event = {
       id: id,
       type: 'SelectSubgroup',
-      itemid: br.readUInt32LE(),
-      objid1: br.readUInt32LE(),
-      objid2: br.readUInt32LE(),
+      item: br.readItemID(),
+      object_id: br.readUInt64LE()
     };
     break;
   case 0x1A:
     event = {
       id: id,
-      type: 'presubselection'
+      type: 'PreSubSelection'
     };
     break;
   case 0x1B:
     event = {
       id: id,
-      type: 'unknown1',
-      field1: br.readUInt8(),
+      type: 'Unknown',
+      field: br.readUInt8(),
       id1: br.readUInt32LE(),
       id2: br.readUInt32LE()
     };
@@ -588,8 +576,7 @@ function parseActions(id, br, header, data) {
     event = {
       id: id,
       type: 'MapTriggerChatCommand',
-      unknown1: br.readUInt32LE(),
-      unknown2: br.readUInt32LE(),
+      unknown: br.readUInt64LE(),
       string: br.readString()
     };
     break;
